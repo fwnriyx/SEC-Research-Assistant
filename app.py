@@ -3,6 +3,13 @@ from data.report import get_cik, get_latest_10k_url, fetch_10k_text, parse_10k, 
 from data.financials import get_financials
 from google import genai
 import yfinance as yf
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+api_key = os.getenv("AISTUDIO_KEY")
+
 
 st.set_page_config(page_title="Stock Research Assistant", layout="wide")
 st.title("📊 Stock Research Assistant")
@@ -56,7 +63,7 @@ if search and ticker:
         mda = extract_section(clean, "Item 7", "Item 8")
         financials_text = extract_section(clean, "Item 8", "Item 9")
 
-        client = genai.Client(api_key="your_key_here")
+        client = genai.Client(api_key = api_key)
         prompt = f"""
         You are a financial analyst. Analyse these sections from a 10-K filing.
 
@@ -80,4 +87,6 @@ if search and ticker:
             contents=prompt
         )
 
-    st.markdown(response.text)
+    # st.markdown(response.text)
+    summary = response.text.replace("$", "\\$")
+    st.markdown(summary)
