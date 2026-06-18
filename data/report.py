@@ -1,8 +1,21 @@
 import requests
 from bs4 import BeautifulSoup
+from google import genai
 
+import os
+from dotenv import load_dotenv
+
+script_dir = os.path.dirname(__file__)
+dotenv_path = os.path.join(script_dir, '..', '.env')
+
+load_dotenv(dotenv_path)
+
+api_key = os.getenv("AISTUDIO_KEY")
 '''
-In this file Im fetching the central index key from public SEC records to see  
+In this file Im fetching the central index key from public SEC records and loaded it into Google's GenAI to make analysis.
+
+From SEC, I fetched Risk factors, financials and also Management's Discussion and Analysis. The prompt can be updated, but I fixed it by default for now.
+The entire AI part is subject to changes, but I tried to make the AI conclusion as subjective as possible.
 
 '''
 
@@ -41,11 +54,11 @@ def fetch_10k_text(url):
 def parse_10k(raw_html):
     soup = BeautifulSoup(raw_html, "html.parser")
     
-    # remove script, style, and hidden elements
+    # remove script, style, and hidden elements cause like why would we use them lol
     for tag in soup(["script", "style"]):
         tag.decompose()
     
-    # remove hidden divs (where the XBRL metadata lives)
+    # remove hidden divs (where XBRL metadata comes from. keeps crowding my outputs so ill cya) btw ai helped me w this
     for tag in soup.find_all(style=lambda s: s and "display:none" in s.replace(" ", "")):
         tag.decompose()
     
@@ -71,7 +84,38 @@ def extract_section(text, start_marker, end_marker):
     
     return text[second:end].strip()
 
+def summarise_10k(risk_factors, mda, financials, api_key):
+    '''
+    WARNING NEED TO SWITCH MODELS BY OCT BUT THIS IS THE CHEAPEST ALT SO FAR
+    '''
+    
+    client = genai.Client(api_key = api_key)
+    
+    prompt = f"""
+    You are a financial analyst. Analyse these sections from a 10-K filing and give a concise research summary.
 
+    RISK FACTORS:
+    {risk_factors[:30000]}
+
+    MD&A:
+    {mda}
+
+    FINANCIAL STATEMENTS:
+    {financials[:30000]}
+
+    Return a summary covering:
+    1. Top 3 risks to be aware of
+    2. Revenue and margin trends from MD&A
+    3. Cash flow health
+    4. Overall investment outlook (1-2 sentences)
+    """
+    
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    
+    return response.text
 
 cik = get_cik("AAPL")
 print(get_latest_10k_url(cik))
@@ -84,12 +128,15 @@ clean = parse_10k(raw)
 
 # extract all the sections needed using first and last words 
 risk_factors = extract_section(clean, "Item 1A.", "Item 1B.")
-mda = extract_section(clean, "Item 7", "Item 8")
-financials = extract_section(clean, "Item 8", "Item 9")
+mda = extract_section(clean, "Item 7.", "Item 7A.")
+financials = extract_section(clean, "Item 8.", "Item 9.")
 
 print("Risk Factors:", len(risk_factors), "chars")
 print("MD&A:", len(mda), "chars")
 print("Financials:", len(financials), "chars")
 # print(risk_factors[:3000])
 
-print(risk_factors[-3000:])
+# print(risk_factors[-3000:])
+
+print(summarise_10k(risk_factors, mda, financials, api_key = api_key))
+
