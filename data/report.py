@@ -10,7 +10,6 @@ dotenv_path = os.path.join(script_dir, '..', '.env')
 
 load_dotenv(dotenv_path)
 
-api_key = os.getenv("AISTUDIO_KEY")
 '''
 In this file Im fetching the central index key from public SEC records and loaded it into Google's GenAI to make analysis.
 
@@ -47,7 +46,7 @@ def get_latest_10k_url(cik):
     return None
 
 def fetch_10k_text(url):
-    headers = {"User-Agent": "yourname@email.com"}
+    headers = {"User-Agent": "forschoolwork.exe@gmail.com"}
     res = requests.get(url, headers=headers)
     return res.text
 
@@ -138,5 +137,6 @@ print("Financials:", len(financials), "chars")
 
 # print(risk_factors[-3000:])
 
-print(summarise_10k(risk_factors, mda, financials, api_key = api_key))
+if __name__ == "__main__":
+    print(summarise_10k(risk_factors, mda, financials, api_key=api_key))
 
