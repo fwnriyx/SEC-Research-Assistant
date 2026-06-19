@@ -1,6 +1,7 @@
-streamlit==1.50.0
-beautifulsoup4==4.15.0
-requests==2.34.2
-python-dotenv==1.2.2
-yfinance>=0.2.66
+streamlit
+yfinance
+requests
+beautifulsoup4
 google-genai
+python-dotenv
+plotly

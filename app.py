@@ -6,6 +6,7 @@ import yfinance as yf
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+import plotly.graph_objects as go
 
 load_dotenv()
 
@@ -47,7 +48,17 @@ if search and ticker:
         hist = yf.Ticker(ticker).history(period="1y")
 
     st.subheader("1 Year Price History")
-    st.line_chart(hist["Close"])
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=hist.index, y=hist["Close"], mode="lines", name="Close"))
+    fig.update_layout(
+        xaxis_title="Date",
+        yaxis_title="Price (USD)",
+        template="plotly_dark",
+        height=400
+    )
+    st.plotly_chart(fig, use_container_width=True)
+        # I was on python 3.9 so I used .line_chart but I swapped to 3.12 for streamlit
+    #st.line_chart(hist["Close"])
 
     st.divider()
 
