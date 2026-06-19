@@ -5,6 +5,7 @@ from google import genai
 import yfinance as yf
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
@@ -12,7 +13,7 @@ api_key = os.getenv("AISTUDIO_KEY")
 
 
 st.set_page_config(page_title="Stock Research Assistant", layout="wide")
-st.title("📊 Stock Research Assistant")
+st.title("Stock Research Assistant")
 st.caption("Pulls live financials + SEC 10-K analysis for any US stock")
 
 ticker = st.text_input("Enter a ticker", placeholder="e.g. AAPL, MSFT, NVDA").upper()
@@ -24,7 +25,7 @@ if search and ticker:
     with st.spinner("Fetching financials..."):
         fin = get_financials(ticker)
 
-    st.subheader(f"🏢 {fin['name']} — {fin['sector']}")
+    st.subheader(f"{fin['name']} — {fin['sector']}")
     st.divider()
 
     col1, col2, col3, col4 = st.columns(4)
@@ -45,7 +46,7 @@ if search and ticker:
     with st.spinner("Loading price chart..."):
         hist = yf.Ticker(ticker).history(period="1y")
 
-    st.subheader("📈 1 Year Price History")
+    st.subheader("1 Year Price History")
     st.line_chart(hist["Close"])
 
     st.divider()
@@ -65,7 +66,10 @@ if search and ticker:
 
         client = genai.Client(api_key = api_key)
         prompt = f"""
-        You are a financial analyst. Analyse these sections from a 10-K filing.
+        You are a financial analyst giving a buy/sell/hold recommendation.
+        Today's date is {datetime.today().strftime('%B %d, %Y')}.
+
+        Analyse these sections from the latest 10-K filing and give a forward-looking research note.
 
         RISK FACTORS:
         {risk_factors}
@@ -76,11 +80,13 @@ if search and ticker:
         FINANCIAL STATEMENTS:
         {financials_text}
 
-        Return a summary covering:
-        1. Top 3 risks to be aware of
-        2. Revenue and margin trends from MD&A
-        3. Cash flow health
-        4. Overall investment outlook (1-2 sentences)
+        Structure your response as:
+        1. **Top 3 Risks** — what could go wrong
+        2. **Revenue & Margin Trends** — is the business growing or shrinking
+        3. **Cash Flow Health** — can they sustain operations
+        4. **Recent Performance** — how was their last reported quarter
+        5. **Sentiment & Outlook** — based on the filing, is the overall tone bullish or bearish? Are they confident or cautious?
+        6. **Buy / Hold / Avoid** — your recommendation and why in 2-3 sentences
         """
         response = client.models.generate_content(
             model="gemini-2.5-flash",
