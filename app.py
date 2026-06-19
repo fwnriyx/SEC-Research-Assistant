@@ -10,8 +10,9 @@ import plotly.graph_objects as go
 
 load_dotenv()
 
-api_key = os.getenv("AISTUDIO_KEY")
-
+# api_key = os.getenv("AISTUDIO_KEY")
+api_key = st.secrets["api_key"]
+st.write("Google key exists:", bool(st.secrets.get("api_key", None)))
 
 st.set_page_config(page_title="Stock Research Assistant", layout="wide")
 st.title("Stock Research Assistant")
