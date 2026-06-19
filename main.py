@@ -64,7 +64,7 @@ def run(ticker):
     )
 
     print("=" * 50)
-    print("📝 10-K AI SUMMARY")
+    print("10-K AI SUMMARY")
     print("=" * 50)
     print(response.text)
 

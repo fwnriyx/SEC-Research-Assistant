@@ -10,6 +10,9 @@ dotenv_path = os.path.join(script_dir, '..', '.env')
 
 load_dotenv(dotenv_path)
 
+api_key = os.getenv("AISTUDIO_KEY")
+
+
 '''
 In this file Im fetching the central index key from public SEC records and loaded it into Google's GenAI to make analysis.
 
@@ -18,19 +21,39 @@ The entire AI part is subject to changes, but I tried to make the AI conclusion 
 
 '''
 
-def get_cik(ticker):
-    # cik = central index key. its basically fancy phrase for ticker.
-    url = "https://www.sec.gov/files/company_tickers.json"
-    headers = {"User-Agent": "forschoolwork.exe@gmail.com"} # SEC requires this
-    res = requests.get(url, headers=headers).json()
-    # print(res.text[:2000])
-    for entry in res.values():
-        if entry["ticker"].upper() == ticker.upper():
-            return str(entry["cik_str"]).zfill(10) # pads to 10 digits
+# def get_cik(ticker):
+#     # cik = central index key. its basically fancy phrase for ticker.
+#     url = "https://www.sec.gov/files/company_tickers.json"
+#     headers = {"User-Agent": "forschoolwork.exe@gmail.com"} # SEC requires this
+#     res = requests.get(url, headers=headers).json()
+#     # print(res.text[:2000])
+#     for entry in res.values():
+#         if entry["ticker"].upper() == ticker.upper():
+#             return str(entry["cik_str"]).zfill(10) # pads to 10 digits
     
+#     return None
+
+def get_cik(ticker):
+    if not ticker:
+        return None
+
+    url = "https://www.sec.gov/files/company_tickers.json"
+    headers = {"User-Agent": "forschoolwork.exe@gmail.com"}
+
+    res = requests.get(url, headers=headers).json()
+
+    ticker = ticker.strip().upper()
+
+    for entry in res.values():
+        if entry["ticker"].strip().upper() == ticker:
+            return str(entry["cik_str"]).zfill(10)
+
     return None
 
 def get_latest_10k_url(cik):
+    # This is for if ure looking for ONLY 10-ks. But foreign companies and companies that recently IPO'd dont have 10-ks
+    if cik is None:
+        raise ValueError("CIK is None — ticker lookup failed")
     url = f"https://data.sec.gov/submissions/CIK{cik}.json"
     headers = {"User-Agent": "forschoolwork.exe@gmail.com"}
     data = requests.get(url, headers=headers).json()
@@ -44,6 +67,37 @@ def get_latest_10k_url(cik):
             return f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession}/{doc_name}"
     
     return None
+
+
+def get_latest_filing_url(cik):
+    #Companies that IPO more recently and foreign companies usually dont have 10-ks. This finds other form types
+    url = f"https://data.sec.gov/submissions/CIK{cik}.json"
+    headers = {"User-Agent": "forschoolwork.exe@gmail.com"}
+    data = requests.get(url, headers=headers).json()
+    
+    filings = data["filings"]["recent"]
+    
+    # priority order of form types to try
+    priority = ["10-K", "20-F", "10-Q", "S-1"]
+    
+    found = {}
+    for i, form in enumerate(filings["form"]):
+        if form in priority and form not in found:
+            accession = filings["accessionNumber"][i].replace("-", "")
+            doc_name = filings["primaryDocument"][i]
+            found[form] = (
+                f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession}/{doc_name}",
+                form
+            )
+        if len(found) == len(priority):
+            break
+    
+    # return highest priority available
+    for form_type in priority:
+        if form_type in found:
+            return found[form_type]  # returns (url, form_type)
+    
+    return None, None
 
 def fetch_10k_text(url):
     headers = {"User-Agent": "forschoolwork.exe@gmail.com"}

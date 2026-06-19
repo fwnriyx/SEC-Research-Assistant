@@ -1,5 +1,5 @@
 import streamlit as st
-from data.report import get_cik, get_latest_10k_url, fetch_10k_text, parse_10k, extract_section
+from data.report import get_cik, fetch_10k_text, parse_10k, extract_section, get_latest_filing_url
 from data.financials import get_financials
 from google import genai
 import yfinance as yf
@@ -15,7 +15,7 @@ api_key = os.getenv("AISTUDIO_KEY")
 
 st.set_page_config(page_title="Stock Research Assistant", layout="wide")
 st.title("Stock Research Assistant")
-st.caption("Pulls live financials + SEC 10-K analysis for any US stock")
+st.caption("Pulls live financials + SEC 10-K analysis for (mainly) any US stock")
 
 ticker = st.text_input("Enter a ticker", placeholder="e.g. AAPL, MSFT, NVDA").upper()
 search = st.button("Research")
@@ -56,7 +56,7 @@ if search and ticker:
         template="plotly_dark",
         height=400
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width = 'stretch')
         # I was on python 3.9 so I used .line_chart but I swapped to 3.12 for streamlit
     #st.line_chart(hist["Close"])
 
@@ -65,9 +65,28 @@ if search and ticker:
     # ── 10-K Summary ────────────────────────────────────
     st.subheader("📝 10-K AI Summary")
 
-    with st.spinner("Fetching and analysing 10-K (this takes ~30s)..."):
+    with st.spinner("Fetching and analysing 10-K (this takes ~ 1 min)..."):
         cik = get_cik(ticker)
-        url = get_latest_10k_url(cik)
+
+        if not cik:
+            st.error("Ticker not found in SEC database")
+            st.stop()
+
+        # USE THIS BLOCK OF CODE IF URE ONLY LOOKING FOR 10Ks
+        # url = get_latest_10k_url(cik)
+
+        # if not url:
+        #     st.error("No 10-K filing found for this company")
+        #     st.stop()
+
+        
+        url, form_type = get_latest_filing_url(cik)
+
+        if not url:
+            st.error("No SEC filing found for this ticker.")
+            st.stop()
+
+        st.caption(f"📄 Analysing: {form_type} filing")
         raw = fetch_10k_text(url)
         clean = parse_10k(raw)
 
@@ -77,7 +96,9 @@ if search and ticker:
 
         client = genai.Client(api_key = api_key)
         prompt = f"""
-        You are a financial analyst giving a buy/sell/hold recommendation.
+        You are a financial analyst. You are analysing a {form_type} filing, not necessarily a 10-K.
+        Adjust your analysis accordingly — if this is an S-1, focus on the business model, 
+        use of proceeds, and risks. If it's a 10-Q, note it only covers one quarter.
         Today's date is {datetime.today().strftime('%B %d, %Y')}.
 
         Analyse these sections from the latest 10-K filing and give a forward-looking research note.
@@ -98,6 +119,8 @@ if search and ticker:
         4. **Recent Performance** — how was their last reported quarter
         5. **Sentiment & Outlook** — based on the filing, is the overall tone bullish or bearish? Are they confident or cautious?
         6. **Buy / Hold / Avoid** — your recommendation and why in 2-3 sentences
+        
+        After every bolded text, leave a line. If theres more sections under the topic, label them with alphabets. For example, every risk for point 1 should be labelled from A to C.
         """
         response = client.models.generate_content(
             model="gemini-2.5-flash",
