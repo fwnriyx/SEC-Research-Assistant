@@ -1,3 +1,4 @@
+import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from google import genai
@@ -33,6 +34,7 @@ The entire AI part is subject to changes, but I tried to make the AI conclusion 
     
 #     return None
 
+@st.cache_data(ttl=3600)
 def get_cik(ticker):
     if not ticker:
         return None

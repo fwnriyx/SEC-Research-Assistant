@@ -1,5 +1,7 @@
 import yfinance as yf
+import streamlit as st
 
+@st.cache_data(ttl=3600)
 def get_financials(ticker):
     stock = yf.Ticker(ticker)
     info = stock.info
