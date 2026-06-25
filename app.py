@@ -1,18 +1,24 @@
 import streamlit as st
-from data.report import get_cik, fetch_10k_text, parse_10k, extract_section, get_latest_filing_url
-from data.financials import get_financials
+from data.report import get_cik, fetch_10k_text, parse_10k, extract_section, get_latest_filing_url, build_prompt
+from data.financials import get_financials, get_price_metrics,  display_revenue
 from google import genai
 import yfinance as yf
 import os
 from dotenv import load_dotenv
 from datetime import datetime
 import plotly.graph_objects as go
+import plotly.express as px
 
 load_dotenv()
 
 # api_key = os.getenv("AISTUDIO_KEY")
-api_key = st.secrets["api_key"]
-st.write("Google key exists:", bool(st.secrets.get("api_key", None)))
+# api_key = st.secrets["api_key"]
+# st.write("Google key exists:", bool(st.secrets.get("api_key", None)))
+try:
+    api_key = st.secrets["api_key"]
+except Exception:
+    api_key = os.getenv("AISTUDIO_KEY")
+
 
 st.set_page_config(page_title="Stock Research Assistant", layout="wide")
 st.title("Stock Research Assistant")
@@ -41,6 +47,14 @@ if search and ticker:
     col6.metric("Free Cash Flow", f"${fin['fcf']:,.0f}")
     col7.metric("Debt / Equity", fin['debt_to_equity'])
     col8.metric("Return on Equity", f"{fin['roic'] * 100:.1f}%")
+    pm = get_price_metrics(ticker)
+
+    st.subheader("Risk Metrics (1 Year)")
+    col9, col10, col11, col12 = st.columns(4)
+    col9.metric("Sharpe Ratio", pm["sharpe_ratio"])
+    col10.metric("Volatility", f"{pm['volatility']}%")
+    col11.metric("Max Drawdown", f"{pm['max_drawdown']}%")
+    col12.metric("1Y Return", f"{pm['ytd_return']}%")
 
     st.divider()
 
@@ -57,13 +71,30 @@ if search and ticker:
         template="plotly_dark",
         height=400
     )
-    st.plotly_chart(fig, width = 'stretch')
+    st.plotly_chart(fig, width = 'stretch', key = "Yearly Price Change")
         # I was on python 3.9 so I used .line_chart but I swapped to 3.12 for streamlit
+        # dont ask me why i was using 3.9 im retro like that
     #st.line_chart(hist["Close"])
+    
 
     st.divider()
+    
+    st.subheader(f'{fin['name']} - Revenue')
+    rev = display_revenue(ticker)
+    if rev is None or rev.empty:
+        st.warning("No revenue data available for this ticker")
+    else:
+        fig = px.line(
+            rev,
+            x="Date",
+            y="Revenue (B)",
+            markers=True,
+            title="Revenue Trend"
+    )
 
-    # ── 10-K Summary ────────────────────────────────────
+        st.plotly_chart(fig, width = 'stretch', key = "revenue_chart")
+    st.divider()
+    # 10-K Summary
     st.subheader("📝 10-K AI Summary")
 
     with st.spinner("Fetching and analysing 10-K (this takes ~ 1 min)..."):
@@ -96,33 +127,7 @@ if search and ticker:
         financials_text = extract_section(clean, "Item 8", "Item 9")
 
         client = genai.Client(api_key = api_key)
-        prompt = f"""
-        You are a financial analyst. You are analysing a {form_type} filing, not necessarily a 10-K.
-        Adjust your analysis accordingly — if this is an S-1, focus on the business model, 
-        use of proceeds, and risks. If it's a 10-Q, note it only covers one quarter.
-        Today's date is {datetime.today().strftime('%B %d, %Y')}.
-
-        Analyse these sections from the latest 10-K filing and give a forward-looking research note.
-
-        RISK FACTORS:
-        {risk_factors}
-
-        MD&A:
-        {mda}
-
-        FINANCIAL STATEMENTS:
-        {financials_text}
-
-        Structure your response as:
-        1. **Top 3 Risks** — what could go wrong
-        2. **Revenue & Margin Trends** — is the business growing or shrinking
-        3. **Cash Flow Health** — can they sustain operations
-        4. **Recent Performance** — how was their last reported quarter
-        5. **Sentiment & Outlook** — based on the filing, is the overall tone bullish or bearish? Are they confident or cautious?
-        6. **Buy / Hold / Avoid** — your recommendation and why in 2-3 sentences
-        
-        After every bolded text, leave a line. If theres more sections under the topic, label them with alphabets. For example, every risk for point 1 should be labelled from A to C.
-        """
+        prompt = build_prompt(risk_factors, mda, financials_text, form_type, fin, pm)
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt

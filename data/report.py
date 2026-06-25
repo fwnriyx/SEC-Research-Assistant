@@ -5,6 +5,8 @@ from google import genai
 
 import os
 from dotenv import load_dotenv
+from datetime import datetime
+import plotly.express as px
 
 script_dir = os.path.dirname(__file__)
 dotenv_path = os.path.join(script_dir, '..', '.env')
@@ -128,6 +130,7 @@ def extract_section(text, start_marker, end_marker):
     but because every item is mentioned in the table of contents, u gotta skip the first time its mentioned.
     also later on, its important to start and end every item with the period cause sometimes its mentioned in other items, but its the wrong section
     u feel me? ok
+    its one of those solutions that i manually crafted and have no clue if itll work forever but it works now so..
     '''
     
     first = text.find(start_marker)
@@ -141,7 +144,7 @@ def extract_section(text, start_marker, end_marker):
 
 def summarise_10k(risk_factors, mda, financials, api_key):
     '''
-    WARNING NEED TO SWITCH MODELS BY OCT BUT THIS IS THE CHEAPEST ALT SO FAR
+    WARNING NEED TO SWITCH AI MODELS BY OCT BUT THIS IS THE CHEAPEST ALT SO FAR
     '''
     
     client = genai.Client(api_key = api_key)
@@ -171,6 +174,52 @@ def summarise_10k(risk_factors, mda, financials, api_key):
     )
     
     return response.text
+
+
+def build_prompt(risk_factors, mda, financials_text, form_type, fin, pm):
+    return f"""
+You are a financial analyst giving a buy/sell/hold recommendation.
+Today's date is {datetime.today().strftime('%B %d, %Y')}.
+You are analysing a {form_type} filing.
+
+─── QUANTITATIVE SNAPSHOT ───
+Revenue Growth:   {fin['revenue_growth'] * 100:.1f}%
+Gross Margin:     {fin['gross_margins'] * 100:.1f}%
+P/E Ratio:        {fin['pe_ratio']}
+PEG Ratio:        {fin['peg_ratio']}
+Free Cash Flow:   ${fin['fcf']:,.0f}
+Debt/Equity:      {fin['debt_to_equity']}
+Return on Equity: {fin['roic'] * 100:.1f}%
+Sharpe Ratio:     {pm['sharpe_ratio']}
+1Y Volatility:    {pm['volatility']}%
+Max Drawdown:     {pm['max_drawdown']}%
+1Y Return:        {pm['ytd_return']}%
+
+─── {form_type} SECTIONS ───
+
+RISK FACTORS:
+{risk_factors}
+
+MD&A:
+{mda}
+
+FINANCIAL STATEMENTS:
+{financials_text}
+
+─── YOUR ANALYSIS ───
+Structure your response as:
+1. **Top 3 Risks** — what could go wrong
+2. **Revenue & Margin Trends** — growing or shrinking
+3. **Cash Flow Health** — can they sustain operations
+4. **Recent Performance** — last reported quarter
+5. **Sentiment & Outlook** — bullish or bearish tone from the filing
+6. **Buy / Hold / Avoid** — recommendation in 2-3 sentences, factor in the quant metrics above
+
+After every bolded text, leave a line. If theres more sections under the topic, label them with alphabets. For example, every risk for point 1 should be labelled from A to C.
+
+"""
+
+
 
 cik = get_cik("AAPL")
 print(get_latest_10k_url(cik))
