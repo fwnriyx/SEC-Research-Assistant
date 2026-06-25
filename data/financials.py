@@ -44,7 +44,7 @@ def get_price_metrics(ticker):
 @st.cache_data(ttl=3600)
 def display_revenue(ticker):
     stock = yf.Ticker(ticker)
-    financials = stock.financials
+    financials = stock.income_stmt
 
     if "Total Revenue" not in financials.index:
         return None
