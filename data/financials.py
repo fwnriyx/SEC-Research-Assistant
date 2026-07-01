@@ -62,8 +62,69 @@ def display_revenue(ticker):
     })
     return df
     
+@st.cache_data(ttl=3600)
+def display_income(ticker):
+    stock = yf.Ticker(ticker)
+    financials = stock.income_stmt
+
+    if "Net Income" not in financials.index:
+        return None
+
+    income = stock.financials.loc["Net Income"]
+
+    df = income.copy()
+    df.index = pd.to_datetime(df.index)
+
+    df = df.sort_index()
+
+    df = pd.DataFrame({
+        "Date": pd.to_datetime(income.index),
+        "Net Income (B)": income.values / 1e9
+    })
+    return df
     
-    
+@st.cache_data(ttl=3600)
+def display_fcf(ticker):
+    stock = yf.Ticker(ticker)
+    cashflow = stock.cashflow
+
+    if "Free Cash Flow" not in cashflow.index:
+        return None
+
+    fcf = stock.cashflow.loc["Free Cash Flow"]
+
+    df = fcf.copy()
+    df.index = pd.to_datetime(df.index)
+
+    df = df.sort_index()
+
+    df = pd.DataFrame({
+        "Date": pd.to_datetime(fcf.index),
+        "Free Cash Flow (B)": fcf.values / 1e9
+    })
+    return df
+
+@st.cache_data(ttl=3600)
+def display_debt(ticker):
+    stock = yf.Ticker(ticker)
+    balanceSheet = stock.balance_sheet
+
+    if "Total Debt" not in balanceSheet.index:
+        return None
+
+    debt = balanceSheet.loc["Total Debt"]
+
+    df = debt.copy()
+    df.index = pd.to_datetime(df.index)
+
+    df = df.sort_index()
+
+    df = pd.DataFrame({
+        "Date": pd.to_datetime(debt.index),
+        "Total Debt (B)": debt.values / 1e9
+    })
+    return df
+
 if __name__ == "__main__":
     print(get_financials("AAPL"))
 

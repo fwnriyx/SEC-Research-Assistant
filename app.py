@@ -1,7 +1,9 @@
 import streamlit as st
 from data.report import get_cik, fetch_10k_text, parse_10k, extract_section, get_latest_filing_url, build_prompt
-from data.financials import get_financials, get_price_metrics,  display_revenue
+from data.financials import get_financials, get_price_metrics,  display_revenue, display_income, display_fcf, display_debt
+from data.metrics import get_rating, calculate_score
 from google import genai
+from google.genai import errors
 import yfinance as yf
 import os
 from dotenv import load_dotenv
@@ -78,13 +80,13 @@ if search and ticker:
     
 
     st.divider()
-    
-    st.subheader(f'{fin['name']} - Revenue')
+    st.subheader("Key statistics")
+    # st.subheader(f'{fin['name']} - Revenue')
     rev = display_revenue(ticker)
     if rev is None or rev.empty:
         st.warning("No revenue data available for this ticker")
     else:
-        fig = px.line(
+        rev_fig = px.line(
             rev,
             x="Date",
             y="Revenue (B)",
@@ -92,7 +94,67 @@ if search and ticker:
             title="Revenue Trend"
     )
 
-        st.plotly_chart(fig, width = 'stretch', key = "revenue_chart")
+        # st.plotly_chart(fig, width = 'stretch', key = "revenue_chart")
+        
+    # st.subheader(f'{fin['name']} - Net Income')
+    income = display_income(ticker)
+    
+    if income is None or income.empty:
+        st.warning("No income data available for this ticker")
+    else:
+        income_fig = px.line(
+            income,
+            x = "Date",
+            y = "Net Income (B)",
+            markers = True,
+            title = "Net Income Trend"
+    )
+        # st.plotly_chart(fig, width = 'stretch', key = 'income_chart')
+        
+    
+    # st.subheader(f'{fin['name']} - Free Cash Flow (FCF)')
+    fcf = display_fcf(ticker)
+    
+    if fcf is None or fcf.empty:
+        st.warning("No income data available for this ticker")
+    else:
+        fcf_fig = px.line(
+            fcf,
+            x = "Date",
+            y = "Free Cash Flow (B)",
+            markers = True,
+            title = "FCF Trend"
+    )
+        # st.plotly_chart(fig, width = 'stretch', key = 'FCF_chart')
+        
+    # st.subheader(f'{fin['name']} - Total Debt')
+    debt = display_debt(ticker)
+    
+    if debt is None or debt.empty:
+        st.warning("No income data available for this ticker")
+    else:
+        debt_fig = px.line(
+            debt,
+            x = "Date",
+            y = "Total Debt (B)",
+            markers = True,
+            title = "Total Debt Trend"
+    )
+        # st.plotly_chart(fig, width = 'stretch', key = 'debt_chart')
+    tab1, tab2, tab3, tab4 = st.tabs(["Revenue", "Net Income", "Free Cash Flow", "Total Debt"])
+
+    with tab1:
+        st.plotly_chart(rev_fig, width = 'stretch')
+
+    with tab2:
+        st.plotly_chart(income_fig, width = 'stretch')
+
+    with tab3:
+        st.plotly_chart(fcf_fig, width = 'stretch')
+
+    with tab4:
+        st.plotly_chart(debt_fig, width = 'stretch')
+        
     st.divider()
     # 10-K Summary
     st.subheader("📝 10-K AI Summary")
@@ -128,11 +190,43 @@ if search and ticker:
 
         client = genai.Client(api_key = api_key)
         prompt = build_prompt(risk_factors, mda, financials_text, form_type, fin, pm)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
+        # response = client.models.generate_content(
+        #     model="gemini-2.5-flash",
+        #     contents=prompt
+        # )
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+
+            summary = response.text.replace("$", "\\$")
+            st.markdown(summary)
+
+        except errors.ServerError:
+            st.warning(
+                "⚠️ AI overview is temporarily unavailable because the Gemini servers are busy. Please try again shortly."
+            )
+
+        except Exception as e:
+            st.error(f"Unexpected error: {e}")
 
     # st.markdown(response.text)
     summary = response.text.replace("$", "\\$")
     st.markdown(summary)
+
+    st.divider()
+
+    score, breakdown = calculate_score(fin, pm)
+    rating = get_rating(score)
+
+    st.divider()
+    st.subheader("🎯 Investment Score")
+
+    col_score, col_rating = st.columns(2)
+    col_score.metric("Score", f"{score} / 100")
+    col_rating.metric("Rating", rating)
+
+    with st.expander("See score breakdown"):
+        for criterion, pts in breakdown.items():
+            st.write(f"{criterion}: **{pts} pts**")
