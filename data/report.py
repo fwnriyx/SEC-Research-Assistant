@@ -176,24 +176,51 @@ def summarise_10k(risk_factors, mda, financials, api_key):
     return response.text
 
 
-def build_prompt(risk_factors, mda, financials_text, form_type, fin, pm):
+def build_prompt(risk_factors, mda, financials_text, form_type, fin, pm, score, rating, bench=None):
+    
+    bench_section = ""
+    if bench:
+        bench_section = f"""
+─── INDUSTRY BENCHMARKS ({fin['sector']}) ───
+Sector Avg P/E:            {bench['pe_ratio']}
+Sector Avg Revenue Growth: {f"{bench['revenue_growth'] * 100:.1f}%" if bench['revenue_growth'] else 'N/A'}
+Sector Avg Gross Margin:   {f"{bench['gross_margins'] * 100:.1f}%" if bench['gross_margins'] else 'N/A'}
+Sector Avg Debt/Equity:    {bench['debt_to_equity']}
+Sector Avg ROE:            {f"{bench['roic'] * 100:.1f}%" if bench['roic'] else 'N/A'}
+
+When making your recommendation, judge this company RELATIVE to its sector averages above.
+A company growing 15% YoY in nuclear energy or utilities may be exceptional for its industry
+even if it looks modest compared to a SaaS company. Context matters.
+"""
+
     return f"""
 You are a financial analyst giving a buy/sell/hold recommendation.
 Today's date is {datetime.today().strftime('%B %d, %Y')}.
 You are analysing a {form_type} filing.
 
 ─── QUANTITATIVE SNAPSHOT ───
-Revenue Growth:   {fin['revenue_growth'] * 100:.1f}%
-Gross Margin:     {fin['gross_margins'] * 100:.1f}%
-P/E Ratio:        {fin['pe_ratio']}
-PEG Ratio:        {fin['peg_ratio']}
-Free Cash Flow:   ${fin['fcf']:,.0f}
-Debt/Equity:      {fin['debt_to_equity']}
-Return on Equity: {fin['roic'] * 100:.1f}%
+Revenue Growth:   {f"{fin['revenue_growth'] * 100:.1f}%" if fin['revenue_growth'] else 'N/A'}
+Gross Margin:     {f"{fin['gross_margins'] * 100:.1f}%" if fin['gross_margins'] else 'N/A'}
+P/E Ratio:        {fin['pe_ratio'] or 'N/A'}
+PEG Ratio:        {fin['peg_ratio'] or 'N/A'}
+Free Cash Flow:   {f"${fin['fcf']:,.0f}" if fin['fcf'] else 'N/A'}
+Debt/Equity:      {fin['debt_to_equity'] or 'N/A'}
+Return on Equity: {f"{fin['roic'] * 100:.1f}%" if fin['roic'] else 'N/A'}
 Sharpe Ratio:     {pm['sharpe_ratio']}
 1Y Volatility:    {pm['volatility']}%
 Max Drawdown:     {pm['max_drawdown']}%
 1Y Return:        {pm['ytd_return']}%
+
+{bench_section}
+─── SCORING CONTEXT ───
+This stock scored {score}/100 on a quantitative scoring model.
+The model rated it: {rating}
+
+Your Buy/Hold/Avoid recommendation MUST be consistent with this score.
+Do not contradict the quantitative rating. You can nuance it but not override it.
+If the score says Buy, your recommendation should lean Buy.
+If the score says Avoid, your recommendation should lean Avoid.
+Explain WHY the score makes sense given what you found in the filing.
 
 ─── {form_type} SECTIONS ───
 
@@ -209,11 +236,11 @@ FINANCIAL STATEMENTS:
 ─── YOUR ANALYSIS ───
 Structure your response as:
 1. **Top 3 Risks** — what could go wrong
-2. **Revenue & Margin Trends** — growing or shrinking
+2. **Revenue & Margin Trends** — is the business growing or shrinking, compare to sector where relevant
 3. **Cash Flow Health** — can they sustain operations
-4. **Recent Performance** — last reported quarter
-5. **Sentiment & Outlook** — bullish or bearish tone from the filing
-6. **Buy / Hold / Avoid** — recommendation in 2-3 sentences, factor in the quant metrics above
+4. **Recent Performance** — how was their last reported quarter
+5. **Sentiment & Outlook** — based on the filing, is the overall tone bullish or bearish
+6. **Buy / Hold / Avoid** — must align with the score of {score}/100 ({rating}), explain in 2-3 sentences
 
 After every bolded text, leave a line. If theres more sections under the topic, label them with alphabets. For example, every risk for point 1 should be labelled from A to C.
 

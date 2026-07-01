@@ -2,6 +2,7 @@ import streamlit as st
 from data.report import get_cik, fetch_10k_text, parse_10k, extract_section, get_latest_filing_url, build_prompt
 from data.financials import get_financials, get_price_metrics,  display_revenue, display_income, display_fcf, display_debt
 from data.metrics import get_rating, calculate_score
+from data.comparison import get_industry_benchmarks
 from google import genai
 from google.genai import errors
 import yfinance as yf
@@ -10,6 +11,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import plotly.graph_objects as go
 import plotly.express as px
+import pandas as pd
 
 load_dotenv()
 
@@ -29,6 +31,38 @@ st.caption("Pulls live financials + SEC 10-K analysis for (mainly) any US stock"
 ticker = st.text_input("Enter a ticker", placeholder="e.g. AAPL, MSFT, NVDA").upper()
 search = st.button("Research")
 
+st.subheader("🆚 Compare Stocks")
+compare_input = st.text_input("Enter tickers to compare (comma separated)", placeholder="AAPL, MSFT, NVDA")
+compare_btn = st.button("Compare")
+
+if compare_btn and compare_input:
+    tickers = [t.strip().upper() for t in compare_input.split(",")]
+    
+    rows = []
+    for t in tickers:
+        try:
+            f = get_financials(t)
+            p = get_price_metrics(t)
+            score, _ = calculate_score(f, p)
+            rating = get_rating(score)
+            rows.append({
+                "Ticker": t,
+                "Name": f["name"],
+                "Score": score,
+                "Rating": rating,
+                "P/E": f["pe_ratio"],
+                "Rev Growth": f"{f['revenue_growth'] * 100:.1f}%" if f["revenue_growth"] else "N/A",
+                "Gross Margin": f"{f['gross_margins'] * 100:.1f}%" if f["gross_margins"] else "N/A",
+                "FCF": f"${f['fcf']:,.0f}" if f["fcf"] else "N/A",
+                "Sharpe": p["sharpe_ratio"],
+                "Max Drawdown": f"{p['max_drawdown']}%",
+                "1Y Return": f"{p['ytd_return']}%",
+            })
+        except Exception as e:
+            st.warning(f"Could not fetch data for {t}: {e}")
+    df = pd.DataFrame(rows).set_index("Ticker")
+    st.dataframe(df, use_container_width=True)
+        
 if search and ticker:
 
     # ── Financials ──────────────────────────────────────
@@ -156,6 +190,29 @@ if search and ticker:
         st.plotly_chart(debt_fig, width = 'stretch')
         
     st.divider()
+    
+    bench = get_industry_benchmarks(fin["sector"])
+
+    if bench:
+        st.subheader(f"📊 vs {fin['sector']} Sector Average")
+        col1, col2, col3 = st.columns(3)
+        
+        col1.metric(
+            "P/E Ratio",
+            fin["pe_ratio"],
+            delta=round(fin["pe_ratio"] - bench["pe_ratio"], 2) if bench["pe_ratio"] else None,
+            delta_color="inverse"  # lower PE = better, so invert the colour
+        )
+        col2.metric(
+            "Revenue Growth",
+            f"{fin['revenue_growth'] * 100:.1f}%",
+            delta=f"{(fin['revenue_growth'] - bench['revenue_growth']) * 100:.1f}%" if bench["revenue_growth"] else None
+        )
+        col3.metric(
+            "Gross Margin",
+            f"{fin['gross_margins'] * 100:.1f}%",
+            delta=f"{(fin['gross_margins'] - bench['gross_margins']) * 100:.1f}%" if bench["gross_margins"] else None
+        )
     # 10-K Summary
     st.subheader("📝 10-K AI Summary")
 
@@ -189,7 +246,7 @@ if search and ticker:
         financials_text = extract_section(clean, "Item 8", "Item 9")
 
         client = genai.Client(api_key = api_key)
-        prompt = build_prompt(risk_factors, mda, financials_text, form_type, fin, pm)
+        prompt = build_prompt(risk_factors, mda, financials_text, form_type, fin, pm, bench)
         # response = client.models.generate_content(
         #     model="gemini-2.5-flash",
         #     contents=prompt
